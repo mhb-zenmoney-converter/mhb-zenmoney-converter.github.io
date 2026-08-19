@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Kind = "expense" | "income";
 type SortKey = "kind" | "date" | "merchant" | "category" | "amount";
@@ -66,6 +66,16 @@ export default function Home(){
     setRows(current=>{const seen=new Set<string>();return [...current,...parsed].filter(r=>{const k=fingerprint(r);if(seen.has(k))return false;seen.add(k);return true})});
     setNotice(parsed.length?`Найдено ${parsed.length} строк. Проверьте таблицу перед экспортом.`:"Операции не найдены. Используйте экран списка, как в присланных примерах.");setBusy(false);setProgress(100);
   }
+  useEffect(()=>{
+    function handlePaste(event:ClipboardEvent){
+      const images=Array.from(event.clipboardData?.files??[]).filter(file=>file.type.startsWith("image/"));
+      if(!images.length)return;
+      event.preventDefault();
+      void processFiles(images);
+    }
+    window.addEventListener("paste",handlePaste);
+    return ()=>window.removeEventListener("paste",handlePaste);
+  },[]);
   function update(id:string,field:keyof Tx,value:string){setRows(all=>all.map(r=>r.id===id?{...r,[field]:value}:r))}
   function exportCsv(){
     const header=["Дата","Категория","Плательщик","Комментарий","Счёт","Сумма (расход)","Пропустить","Счёт-получатель","Сумма (доход)","Пропустить","Пропустить","Пропустить"];
@@ -84,7 +94,7 @@ export default function Home(){
   return <main>
     <header className="hero"><div className="brand"><span>mHB</span><i>→</i><strong>ZenMoney</strong></div><h1>Скриншоты операций<br/>превращаются в аккуратный CSV</h1><p>Всё распознавание происходит прямо в браузере. Снимки не загружаются и нигде не сохраняются.</p></header>
     <section className="workspace">
-      <div className={`dropzone ${busy?"busy":""}`} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();processFiles(e.dataTransfer.files)}}><div className="uploadIcon">↑</div><h2>{busy?"Распознаю операции":"Добавьте скриншоты mHB klik"}</h2><p>{notice}</p>{busy&&<div className="progress"><span style={{width:`${progress}%`}}/></div>}<input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e=>e.target.files&&processFiles(e.target.files)}/><button className="primary" disabled={busy} onClick={()=>fileInput.current?.click()}>{busy?`${progress}%`:"Выбрать изображения"}</button><small>Можно выбрать сразу несколько перекрывающихся скриншотов</small></div>
+      <div className={`dropzone ${busy?"busy":""}`} onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();processFiles(e.dataTransfer.files)}}><div className="uploadIcon">↑</div><h2>{busy?"Распознаю операции":"Добавьте скриншоты mHB klik"}</h2><div className="pasteHint"><kbd>⌘V</kbd><span>или</span><kbd>Ctrl+V</kbd><strong>Вставьте из буфера обмена</strong></div><p>{notice}</p>{busy&&<div className="progress"><span style={{width:`${progress}%`}}/></div>}<input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={e=>e.target.files&&processFiles(e.target.files)}/><button className="primary" disabled={busy} onClick={()=>fileInput.current?.click()}>{busy?`${progress}%`:"Выбрать изображения"}</button><small>Также можно перетащить или выбрать сразу несколько скриншотов</small></div>
       <div className="settings"><label>Название счёта в ZenMoney<input value={account} onChange={e=>setAccount(e.target.value)}/></label><div><span>Операций</span><b>{rows.length}</b></div><div><span>Итог</span><b className={total<0?"negative":"positive"}>{total.toFixed(2)} EUR</b></div></div>
     </section>
     {rows.length>0&&<><section className="results"><div className="resultsHead"><div><span>ПРОВЕРКА</span><h2>Распознанные операции</h2></div><button className="export" onClick={exportCsv}>Скачать CSV</button></div><div className="tableWrap"><table><thead><tr><th><button className="sortButton" onClick={()=>toggleSort("kind")}>Тип{sortMark("kind")}</button></th><th><button className="sortButton" onClick={()=>toggleSort("date")}>Дата{sortMark("date")}</button></th><th><button className="sortButton" onClick={()=>toggleSort("merchant")}>Описание{sortMark("merchant")}</button></th><th><button className="sortButton" onClick={()=>toggleSort("category")}>Категория{sortMark("category")}</button></th><th><button className="sortButton" onClick={()=>toggleSort("amount")}>Сумма, EUR{sortMark("amount")}</button></th><th/></tr></thead><tbody>{sortedRows.map(r=><tr key={r.id}><td><select value={r.kind} onChange={e=>update(r.id,"kind",e.target.value)}><option value="expense">Расход</option><option value="income">Доход</option></select></td><td><input type="date" value={r.date} onChange={e=>update(r.id,"date",e.target.value)}/></td><td><input value={r.merchant} onChange={e=>update(r.id,"merchant",e.target.value)}/></td><td><input value={r.category} onChange={e=>update(r.id,"category",e.target.value)}/></td><td><input className="amount" inputMode="decimal" value={r.amount} onChange={e=>update(r.id,"amount",e.target.value.replace(",","."))}/></td><td><button className="remove" aria-label="Удалить" onClick={()=>setRows(all=>all.filter(x=>x.id!==r.id))}>×</button></td></tr>)}</tbody></table></div><p className="hint">Дата операции берётся из Currency date. Realisation date сохраняется в комментарии. Совпадающие строки удаляются автоматически.</p></section>
