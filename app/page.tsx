@@ -48,7 +48,7 @@ function fingerprint(tx:Tx){return [tx.kind,tx.date,tx.realised,Number(tx.amount
 function escapeCsv(value:string){return `"${value.replace(/"/g,'""')}"`}
 function errorText(value:unknown){if(value instanceof Error)return value.message;if(typeof value==="string")return value;try{return JSON.stringify(value,null,2)}catch{return "Неизвестная ошибка"}}
 function localIsoDate(date:Date){return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`}
-function money(value:number,currency:string){return `${new Intl.NumberFormat("ru-RU",{minimumFractionDigits:2,maximumFractionDigits:2}).format(value)} ${currency}`}
+function money(value:number,currency:string){return `${new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(value)} ${currency}`}
 async function stableUuid(value:string){const bytes=new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(value))).slice(0,16);bytes[6]=(bytes[6]&15)|80;bytes[8]=(bytes[8]&63)|128;const hex=[...bytes].map(x=>x.toString(16).padStart(2,"0")).join("");return `${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`}
 
 export default function Home(){
@@ -85,6 +85,11 @@ export default function Home(){
     const categories=[...categoryTotals.values()].sort((a,b)=>b.amount-a.amount);
     return {currencies,categories,markerCount:markers.length,endDate};
   },[zstate,forecastDays]);
+  const categoryGroups=useMemo(()=>{
+    const groups=new Map<string,ForecastCategory[]>();
+    forecast.categories.forEach(item=>groups.set(item.currency,[...(groups.get(item.currency)||[]),item]));
+    return [...groups].map(([currency,items])=>({currency,items})).sort((a,b)=>a.currency.localeCompare(b.currency));
+  },[forecast.categories]);
   function toggleSort(key:SortKey){setSort(current=>({key,direction:current.key===key&&current.direction==="asc"?"desc":"asc"}))}
   function sortMark(key:SortKey){return sort.key===key?(sort.direction==="asc"?" ↑":" ↓"):""}
   async function processFiles(files:FileList|File[]){
@@ -132,7 +137,7 @@ export default function Home(){
     {zstate&&<section className="financeCard">
       <div className="financeHead"><div><span className="eyebrow">ПРОГНОЗ</span><h2>Деньги на ближайшие {forecastDays} дней</h2><p>Учтено запланированных операций: {forecast.markerCount}. Период по {forecast.endDate.split("-").reverse().join(".")}.</p></div><label>Период<select value={forecastDays} onChange={e=>setForecastDays(Number(e.target.value))}><option value={30}>30 дней</option><option value={45}>45 дней</option><option value={60}>60 дней</option></select></label></div>
       <div className="forecastGrid">{forecast.currencies.map(item=><article key={item.instrument}><span>{item.currency}</span><dl><div><dt>Сейчас</dt><dd>{money(item.balance,item.currency)}</dd></div><div><dt>Запланировано трат</dt><dd className="negative">−{money(item.expenses,item.currency)}</dd></div><div><dt>Ожидается доходов</dt><dd className="positive">+{money(item.income,item.currency)}</dd></div><div className="forecastTotal"><dt>Останется</dt><dd className={item.forecast<0?"negative":"positive"}>{money(item.forecast,item.currency)}</dd></div></dl></article>)}</div>
-      <div className="financeDetails"><div><h3>Счета</h3>{zstate.accounts.map(a=><div className="accountRow" key={a.id}><span>{a.title}</span><b>{money(Number(a.balance||0),zstate.instruments.find(i=>i.id===a.instrument)?.shortTitle||"")}</b></div>)}</div><div><h3>Плановые траты по категориям</h3>{forecast.categories.length?forecast.categories.map(item=><div className="categoryRow" key={`${item.instrument}-${item.title}`}><span>{item.title}</span><b>{money(item.amount,item.currency)}</b></div>):<p className="emptyForecast">На выбранный период плановых расходов нет.</p>}</div></div>
+      <div className="financeDetails"><div><h3>Счета</h3>{zstate.accounts.map(a=><div className="accountRow" key={a.id}><span>{a.title}</span><b>{money(Number(a.balance||0),zstate.instruments.find(i=>i.id===a.instrument)?.shortTitle||"")}</b></div>)}</div><div><h3>Плановые траты по категориям</h3>{categoryGroups.length?categoryGroups.map(group=><div className="categoryGroup" key={group.currency}><h4>{group.currency}</h4>{group.items.map(item=><div className="categoryRow" key={`${item.instrument}-${item.title}`}><span>{item.title}</span><b>{money(item.amount,item.currency)}</b></div>)}</div>):<p className="emptyForecast">На выбранный период плановых расходов нет.</p>}</div></div>
       <p className="forecastNote">В «Останется» учитываются также запланированные переводы между своими счетами. В расходы и доходы такие переводы не попадают.</p>
     </section>}
   </main>
