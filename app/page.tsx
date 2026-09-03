@@ -41,8 +41,10 @@ function parseText(text:string, filename:string):Tx[] {
     const amount=m[1].replace(/,/g,""); if(!/^\d+(?:\.\d{1,2})?$/.test(amount)||Number(amount)<=0) continue;
     const before=lines[i].slice(0,m.index).trim(); const merchant=(before||lines[i-1]||"").replace(/^[©®@0O]\s*/,"").replace(/\s{2,}/g," ").trim();
     if(!merchant||/Transactions|Income|Expense|Reserved|All/i.test(merchant)) continue;
-    let date="",realised=""; let kind:Kind=/Income/i.test(m[2]??"")?"income":"expense";
-    for(let j=i;j<Math.min(i+5,lines.length);j++){if(/Currency date/i.test(lines[j]))date=isoDate(lines[j]);if(/Realisation date/i.test(lines[j]))realised=isoDate(lines[j]);if(/\bIncome\b/i.test(lines[j]))kind="income";}
+    let blockEnd=Math.min(i+7,lines.length);for(let j=i+1;j<blockEnd;j++){if(amountRx.test(lines[j])){blockEnd=j;break}}
+    const block=lines.slice(i,blockEnd);const kindText=m[2]||block.map(line=>line.match(/\b(Expense|Income)\b/i)?.[1]).find(Boolean)||"Expense";
+    let date="",realised="";const kind:Kind=/Income/i.test(kindText)?"income":"expense";
+    for(const line of block){if(/Currency date/i.test(line))date=isoDate(line);if(/Realisation date/i.test(line))realised=isoDate(line);}
     if(!date)continue;
     rows.push({id:crypto.randomUUID(),kind,merchant,date,realised,amount,category:guessCategory(merchant,kind),source:filename});
   } return rows;
